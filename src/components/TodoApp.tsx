@@ -1,10 +1,12 @@
 import React, { useState, useEffect, FormEvent, ChangeEvent } from 'react'
 import { supabase } from '@/lib/supabase'
+import { useAuth } from '@/contexts/AuthContext'
 import { Button } from '@/components/ui/button'
 import { Input } from '@/components/ui/input'
 import { Card, CardContent, CardHeader, CardTitle } from '@/components/ui/card'
 import { Trash2, Plus, CheckCircle2, Circle } from 'lucide-react'
 import { motion, AnimatePresence } from 'framer-motion'
+import UserMenu from './auth/UserMenu'
 
 // 定义 Todo 类型
 interface Todo {
@@ -13,19 +15,24 @@ interface Todo {
   completed: boolean
   created_at: string
   updated_at: string
+  user_id: string
 }
 
 export default function TodoApp(): React.ReactElement {
   const [todos, setTodos] = useState<Todo[]>([])
   const [newTodo, setNewTodo] = useState<string>('')
   const [loading, setLoading] = useState<boolean>(true)
+  const { user } = useAuth()
 
-  // 获取所有待办事项
+  // 获取当前用户的待办事项
   const fetchTodos = async (): Promise<void> => {
+    if (!user) return
+    
     try {
       const { data, error } = await supabase
         .from('todos')
         .select('*')
+        .eq('user_id', user.id)
         .order('created_at', { ascending: false })
       
       if (error) throw error
@@ -40,12 +47,15 @@ export default function TodoApp(): React.ReactElement {
   // 添加新的待办事项
   const addTodo = async (e: FormEvent<HTMLFormElement>): Promise<void> => {
     e.preventDefault()
-    if (!newTodo.trim()) return
+    if (!newTodo.trim() || !user) return
 
     try {
       const { data, error } = await supabase
         .from('todos')
-        .insert([{ title: newTodo.trim() }])
+        .insert([{ 
+          title: newTodo.trim(),
+          user_id: user.id
+        }])
         .select()
       
       if (error) throw error
@@ -60,11 +70,14 @@ export default function TodoApp(): React.ReactElement {
 
   // 切换待办事项完成状态
   const toggleTodo = async (id: number, completed: boolean): Promise<void> => {
+    if (!user) return
+    
     try {
       const { error } = await supabase
         .from('todos')
         .update({ completed: !completed, updated_at: new Date().toISOString() })
         .eq('id', id)
+        .eq('user_id', user.id)
       
       if (error) throw error
       setTodos(todos.map(todo => 
@@ -77,11 +90,14 @@ export default function TodoApp(): React.ReactElement {
 
   // 删除待办事项
   const deleteTodo = async (id: number): Promise<void> => {
+    if (!user) return
+    
     try {
       const { error } = await supabase
         .from('todos')
         .delete()
         .eq('id', id)
+        .eq('user_id', user.id)
       
       if (error) throw error
       setTodos(todos.filter(todo => todo.id !== id))
@@ -91,8 +107,10 @@ export default function TodoApp(): React.ReactElement {
   }
 
   useEffect(() => {
-    fetchTodos()
-  }, [])
+    if (user) {
+      fetchTodos()
+    }
+  }, [user])
 
   const completedCount = todos.filter(todo => todo.completed).length
   const totalCount = todos.length
@@ -114,20 +132,35 @@ export default function TodoApp(): React.ReactElement {
           transition={{ duration: 0.5 }}
         >
           <Card className="shadow-xl border-0 bg-white/80 backdrop-blur-sm">
-            <CardHeader className="text-center pb-6">
-              <CardTitle className="text-3xl font-bold bg-gradient-to-r from-indigo-600 to-purple-600 bg-clip-text text-transparent">
-                待办事项管理
-              </CardTitle>
-              <p className="text-muted-foreground mt-2">
-                已完成 {completedCount} / {totalCount} 项任务
-              </p>
-              <div className="w-full bg-gray-200 rounded-full h-2 mt-3">
-                <motion.div
-                  className="bg-gradient-to-r from-indigo-500 to-purple-500 h-2 rounded-full"
-                  initial={{ width: 0 }}
-                  animate={{ width: totalCount > 0 ? `${(completedCount / totalCount) * 100}%` : '0%' }}
-                  transition={{ duration: 0.5 }}
-                />
+            <CardHeader className="pb-6">
+              {/* 用户信息和菜单 */}
+              <div className="flex items-center justify-between mb-4">
+                <div>
+                  <h1 className="text-2xl font-bold text-gray-800">
+                    你好，{user?.user_metadata?.full_name || user?.email?.split('@')[0] || '用户'}！
+                  </h1>
+                  <p className="text-sm text-gray-600">
+                    欢迎回到您的待办事项管理
+                  </p>
+                </div>
+                <UserMenu />
+              </div>
+              
+              <div className="text-center">
+                <CardTitle className="text-3xl font-bold bg-gradient-to-r from-indigo-600 to-purple-600 bg-clip-text text-transparent">
+                  我的待办事项
+                </CardTitle>
+                <p className="text-muted-foreground mt-2">
+                  已完成 {completedCount} / {totalCount} 项任务
+                </p>
+                <div className="w-full bg-gray-200 rounded-full h-2 mt-3">
+                  <motion.div
+                    className="bg-gradient-to-r from-indigo-500 to-purple-500 h-2 rounded-full"
+                    initial={{ width: 0 }}
+                    animate={{ width: totalCount > 0 ? `${(completedCount / totalCount) * 100}%` : '0%' }}
+                    transition={{ duration: 0.5 }}
+                  />
+                </div>
               </div>
             </CardHeader>
             
