@@ -4,9 +4,12 @@ import { useAuth } from '@/contexts/AuthContext'
 import { Button } from '@/components/ui/button'
 import { Input } from '@/components/ui/input'
 import { Card, CardContent, CardHeader, CardTitle } from '@/components/ui/card'
-import { Trash2, Plus, CheckCircle2, Circle } from 'lucide-react'
+import { Trash2, Plus, CheckCircle2, Circle, Edit3 } from 'lucide-react'
 import { motion, AnimatePresence } from 'framer-motion'
 import UserMenu from './auth/UserMenu'
+import DatePicker from './DatePicker'
+import DueDateBadge from './DueDateBadge'
+import { isOverdue, isDueToday } from '@/utils/dateUtils'
 
 // 定义 Todo 类型
 interface Todo {
@@ -16,11 +19,14 @@ interface Todo {
   created_at: string
   updated_at: string
   user_id: string
+  due_date?: string | null
 }
 
 export default function TodoApp(): React.ReactElement {
   const [todos, setTodos] = useState<Todo[]>([])
   const [newTodo, setNewTodo] = useState<string>('')
+  const [newTodoDueDate, setNewTodoDueDate] = useState<string | null>(null)
+  const [editingDueDate, setEditingDueDate] = useState<number | null>(null)
   const [loading, setLoading] = useState<boolean>(true)
   const { user } = useAuth()
 
@@ -54,7 +60,8 @@ export default function TodoApp(): React.ReactElement {
         .from('todos')
         .insert([{ 
           title: newTodo.trim(),
-          user_id: user.id
+          user_id: user.id,
+          due_date: newTodoDueDate
         }])
         .select()
       
@@ -63,6 +70,7 @@ export default function TodoApp(): React.ReactElement {
         setTodos([...data, ...todos])
       }
       setNewTodo('')
+      setNewTodoDueDate(null)
     } catch (error) {
       console.error('Error adding todo:', error)
     }
@@ -106,6 +114,30 @@ export default function TodoApp(): React.ReactElement {
     }
   }
 
+  // 更新待办事项截止日期
+  const updateTodoDueDate = async (id: number, dueDate: string | null): Promise<void> => {
+    if (!user) return
+    
+    try {
+      const { error } = await supabase
+        .from('todos')
+        .update({ 
+          due_date: dueDate,
+          updated_at: new Date().toISOString() 
+        })
+        .eq('id', id)
+        .eq('user_id', user.id)
+      
+      if (error) throw error
+      setTodos(todos.map(todo => 
+        todo.id === id ? { ...todo, due_date: dueDate } : todo
+      ))
+      setEditingDueDate(null)
+    } catch (error) {
+      console.error('Error updating todo due date:', error)
+    }
+  }
+
   useEffect(() => {
     if (user) {
       fetchTodos()
@@ -114,6 +146,45 @@ export default function TodoApp(): React.ReactElement {
 
   const completedCount = todos.filter(todo => todo.completed).length
   const totalCount = todos.length
+
+  // 对待办事项进行排序：逾期 > 今天到期 > 其他未完成 > 已完成
+  const sortedTodos = [...todos].sort((a, b) => {
+    // 已完成的任务排在最后
+    if (a.completed !== b.completed) {
+      return a.completed ? 1 : -1
+    }
+    
+    // 对于未完成的任务，按截止日期优先级排序
+    if (!a.completed && !b.completed) {
+      const aOverdue = a.due_date && isOverdue(a.due_date)
+      const bOverdue = b.due_date && isOverdue(b.due_date)
+      const aDueToday = a.due_date && isDueToday(a.due_date)
+      const bDueToday = b.due_date && isDueToday(b.due_date)
+      
+      // 逾期任务优先
+      if (aOverdue !== bOverdue) {
+        return aOverdue ? -1 : 1
+      }
+      
+      // 今天到期的任务其次
+      if (aDueToday !== bDueToday) {
+        return aDueToday ? -1 : 1
+      }
+      
+      // 有截止日期的任务优先于没有截止日期的
+      if ((a.due_date !== null) !== (b.due_date !== null)) {
+        return a.due_date ? -1 : 1
+      }
+      
+      // 如果都有截止日期，按日期排序
+      if (a.due_date && b.due_date) {
+        return new Date(a.due_date).getTime() - new Date(b.due_date).getTime()
+      }
+    }
+    
+    // 最后按创建时间排序
+    return new Date(b.created_at).getTime() - new Date(a.created_at).getTime()
+  })
 
   if (loading) {
     return (
@@ -166,26 +237,49 @@ export default function TodoApp(): React.ReactElement {
             
             <CardContent className="space-y-6">
               {/* 添加新任务表单 */}
-              <form onSubmit={addTodo} className="flex gap-2">
-                <Input
-                  type="text"
-                  placeholder="添加新的待办事项..."
-                  value={newTodo}
-                  onChange={(e: ChangeEvent<HTMLInputElement>) => setNewTodo(e.target.value)}
-                  className="flex-1 border-2 border-gray-200 focus:border-indigo-500 transition-colors"
-                />
-                <Button 
-                  type="submit" 
-                  className="bg-gradient-to-r from-indigo-500 to-purple-500 hover:from-indigo-600 hover:to-purple-600 transition-all duration-200 shadow-lg hover:shadow-xl"
+              <form onSubmit={addTodo} className="space-y-3">
+                <div className="flex gap-2">
+                  <Input
+                    type="text"
+                    placeholder="添加新的待办事项..."
+                    value={newTodo}
+                    onChange={(e: ChangeEvent<HTMLInputElement>) => setNewTodo(e.target.value)}
+                    className="flex-1 border-2 border-gray-200 focus:border-indigo-500 transition-colors"
+                  />
+                  <Button 
+                    type="submit" 
+                    className="bg-gradient-to-r from-indigo-500 to-purple-500 hover:from-indigo-600 hover:to-purple-600 transition-all duration-200 shadow-lg hover:shadow-xl"
                 >
                   <Plus className="w-4 h-4" />
                 </Button>
+                </div>
+                
+                {/* 截止日期选择器 */}
+                <div className="flex items-center gap-2">
+                  <DatePicker
+                    value={newTodoDueDate}
+                    onChange={setNewTodoDueDate}
+                    placeholder="设置截止日期（可选）"
+                    className="flex-1"
+                  />
+                  {newTodoDueDate && (
+                    <Button
+                      type="button"
+                      variant="ghost"
+                      size="sm"
+                      onClick={() => setNewTodoDueDate(null)}
+                      className="text-gray-500 hover:text-red-500"
+                    >
+                      清除
+                    </Button>
+                  )}
+                </div>
               </form>
 
               {/* 待办事项列表 */}
               <div className="space-y-3">
                 <AnimatePresence>
-                  {todos.map((todo) => (
+                  {sortedTodos.map((todo) => (
                     <motion.div
                       key={todo.id}
                       initial={{ opacity: 0, x: -20 }}
@@ -210,15 +304,45 @@ export default function TodoApp(): React.ReactElement {
                         )}
                       </button>
                       
-                      <span 
-                        className={`flex-1 transition-all duration-200 ${
-                          todo.completed 
-                            ? 'text-green-700 line-through opacity-75' 
-                            : 'text-gray-800'
-                        }`}
-                      >
-                        {todo.title}
-                      </span>
+                      <div className="flex-1 space-y-2">
+                        <span 
+                          className={`block transition-all duration-200 ${
+                            todo.completed 
+                              ? 'text-green-700 line-through opacity-75' 
+                              : 'text-gray-800'
+                          }`}
+                        >
+                          {todo.title}
+                        </span>
+                        
+                        {/* 截止日期显示 */}
+                        <div className="flex items-center gap-2">
+                          <DueDateBadge 
+                            dueDate={todo.due_date} 
+                            completed={todo.completed}
+                          />
+                          
+                          {/* 编辑截止日期按钮 */}
+                          {editingDueDate === todo.id ? (
+                            <DatePicker
+                              value={todo.due_date}
+                              onChange={(date) => updateTodoDueDate(todo.id, date)}
+                              placeholder="设置截止日期"
+                              className="w-48"
+                            />
+                          ) : (
+                            <Button
+                              variant="ghost"
+                              size="sm"
+                              onClick={() => setEditingDueDate(todo.id)}
+                              className="text-gray-400 hover:text-indigo-500 p-1 h-auto"
+                              type="button"
+                            >
+                              <Edit3 className="w-3 h-3" />
+                            </Button>
+                          )}
+                        </div>
+                      </div>
                       
                       <Button
                         variant="ghost"
