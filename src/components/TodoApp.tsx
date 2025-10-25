@@ -4,11 +4,13 @@ import { useAuth } from '@/contexts/AuthContext'
 import { Button } from '@/components/ui/button'
 import { Input } from '@/components/ui/input'
 import { Card, CardContent, CardHeader, CardTitle } from '@/components/ui/card'
-import { Trash2, Plus, CheckCircle2, Circle, Edit3 } from 'lucide-react'
+import { Trash2, Plus, CheckCircle2, Circle, Edit3, Download, Package } from 'lucide-react'
 import { motion, AnimatePresence } from 'framer-motion'
 import UserMenu from './auth/UserMenu'
 import DatePicker from './DatePicker'
 import DueDateBadge from './DueDateBadge'
+import ExportButton from './ExportButton'
+import BatchExport from './BatchExport'
 import { isOverdue, isDueToday } from '@/utils/dateUtils'
 
 // 定义 Todo 类型
@@ -28,6 +30,7 @@ export default function TodoApp(): React.ReactElement {
   const [newTodoDueDate, setNewTodoDueDate] = useState<string | null>(null)
   const [editingDueDate, setEditingDueDate] = useState<number | null>(null)
   const [loading, setLoading] = useState<boolean>(true)
+  const [showBatchExport, setShowBatchExport] = useState<boolean>(false)
   const { user } = useAuth()
 
   // 获取当前用户的待办事项
@@ -204,7 +207,7 @@ export default function TodoApp(): React.ReactElement {
         >
           <Card className="shadow-xl border-0 bg-white/80 backdrop-blur-sm">
             <CardHeader className="pb-6">
-              {/* 用户信息和菜单 */}
+              {/* 用户信息、导出按钮和菜单 */}
               <div className="flex items-center justify-between mb-4">
                 <div>
                   <h1 className="text-2xl font-bold text-gray-800">
@@ -214,7 +217,23 @@ export default function TodoApp(): React.ReactElement {
                     欢迎回到您的待办事项管理
                   </p>
                 </div>
-                <UserMenu />
+                <div className="flex items-center gap-2">
+                  {todos.length > 0 && (
+                    <>
+                      <ExportButton todos={todos} />
+                      <Button
+                        variant="outline"
+                        size="sm"
+                        onClick={() => setShowBatchExport(true)}
+                        className="flex items-center gap-2"
+                      >
+                        <Package className="w-4 h-4" />
+                        批量导出
+                      </Button>
+                    </>
+                  )}
+                  <UserMenu />
+                </div>
               </div>
               
               <div className="text-center">
@@ -372,6 +391,13 @@ export default function TodoApp(): React.ReactElement {
             </CardContent>
           </Card>
         </motion.div>
+        
+        {/* 批量导出对话框 */}
+        <BatchExport
+          todos={todos}
+          isOpen={showBatchExport}
+          onClose={() => setShowBatchExport(false)}
+        />
       </div>
     </div>
   )
