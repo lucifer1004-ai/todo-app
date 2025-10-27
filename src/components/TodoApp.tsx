@@ -29,6 +29,8 @@ export default function TodoApp(): React.ReactElement {
   const [newTodo, setNewTodo] = useState<string>('')
   const [newTodoDueDate, setNewTodoDueDate] = useState<string | null>(null)
   const [editingDueDate, setEditingDueDate] = useState<number | null>(null)
+  const [editingTodo, setEditingTodo] = useState<number | null>(null)
+  const [editingText, setEditingText] = useState<string>('')
   const [loading, setLoading] = useState<boolean>(true)
   const [showBatchExport, setShowBatchExport] = useState<boolean>(false)
   const { user } = useAuth()
@@ -139,6 +141,46 @@ export default function TodoApp(): React.ReactElement {
     } catch (error) {
       console.error('Error updating todo due date:', error)
     }
+  }
+
+  // 开始编辑待办事项标题
+  const startEditingTodo = (id: number, currentTitle: string): void => {
+    setEditingTodo(id)
+    setEditingText(currentTitle)
+  }
+
+  // 更新待办事项标题
+  const updateTodoTitle = async (id: number): Promise<void> => {
+    if (!user || !editingText.trim()) {
+      setEditingTodo(null)
+      return
+    }
+    
+    try {
+      const { error } = await supabase
+        .from('todos')
+        .update({ 
+          title: editingText.trim(),
+          updated_at: new Date().toISOString() 
+        })
+        .eq('id', id)
+        .eq('user_id', user.id)
+      
+      if (error) throw error
+      setTodos(todos.map(todo => 
+        todo.id === id ? { ...todo, title: editingText.trim() } : todo
+      ))
+      setEditingTodo(null)
+      setEditingText('')
+    } catch (error) {
+      console.error('Error updating todo title:', error)
+    }
+  }
+
+  // 取消编辑
+  const cancelEditing = (): void => {
+    setEditingTodo(null)
+    setEditingText('')
   }
 
   useEffect(() => {
@@ -324,15 +366,63 @@ export default function TodoApp(): React.ReactElement {
                       </button>
                       
                       <div className="flex-1 space-y-2">
-                        <span 
-                          className={`block transition-all duration-200 ${
-                            todo.completed 
-                              ? 'text-green-700 line-through opacity-75' 
-                              : 'text-gray-800'
-                          }`}
-                        >
-                          {todo.title}
-                        </span>
+                        {editingTodo === todo.id ? (
+                          <div className="flex items-center gap-2">
+                            <Input
+                              type="text"
+                              value={editingText}
+                              onChange={(e: ChangeEvent<HTMLInputElement>) => setEditingText(e.target.value)}
+                              onKeyDown={(e: React.KeyboardEvent<HTMLInputElement>) => {
+                                if (e.key === 'Enter') {
+                                  updateTodoTitle(todo.id)
+                                } else if (e.key === 'Escape') {
+                                  cancelEditing()
+                                }
+                              }}
+                              className="flex-1 border-2 border-indigo-500 focus:border-indigo-600"
+                              autoFocus
+                            />
+                            <Button
+                              variant="ghost"
+                              size="sm"
+                              onClick={() => updateTodoTitle(todo.id)}
+                              className="text-green-600 hover:text-green-700 hover:bg-green-50"
+                              type="button"
+                            >
+                              保存
+                            </Button>
+                            <Button
+                              variant="ghost"
+                              size="sm"
+                              onClick={cancelEditing}
+                              className="text-gray-600 hover:text-gray-700 hover:bg-gray-50"
+                              type="button"
+                            >
+                              取消
+                            </Button>
+                          </div>
+                        ) : (
+                          <div className="flex items-center gap-2 group">
+                            <span 
+                              className={`block flex-1 transition-all duration-200 ${
+                                todo.completed 
+                                  ? 'text-green-700 line-through opacity-75' 
+                                  : 'text-gray-800'
+                              }`}
+                            >
+                              {todo.title}
+                            </span>
+                            <Button
+                              variant="ghost"
+                              size="sm"
+                              onClick={() => startEditingTodo(todo.id, todo.title)}
+                              className="text-gray-400 hover:text-indigo-500 p-1 h-auto opacity-0 group-hover:opacity-100 transition-opacity"
+                              type="button"
+                            >
+                              <Edit3 className="w-4 h-4" />
+                            </Button>
+                          </div>
+                        )}
                         
                         {/* 截止日期显示 */}
                         <div className="flex items-center gap-2">
