@@ -42,11 +42,22 @@ export function isDueTomorrow(dueDate: string | null): boolean {
 /**
  * 格式化日期显示
  */
-export function formatDueDate(dueDate: string | null): string {
+export function formatDueDate(dueDate: string | null, completed: boolean = false): string {
   if (!dueDate) return ''
   
   const due = new Date(dueDate)
   const now = new Date()
+  
+  // 如果任务已完成，只显示日期，不显示逾期状态
+  if (completed) {
+    return due.toLocaleDateString('zh-CN', {
+      year: 'numeric',
+      month: 'short',
+      day: 'numeric',
+      hour: '2-digit',
+      minute: '2-digit'
+    })
+  }
   
   if (isOverdue(dueDate)) {
     const diffTime = now.getTime() - due.getTime()

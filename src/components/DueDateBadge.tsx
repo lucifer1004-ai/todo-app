@@ -17,7 +17,7 @@ export default function DueDateBadge({
 
   const isTaskOverdue = isOverdue(dueDate) && !completed
   const isTaskDueToday = isDueToday(dueDate) && !completed
-  const dateText = formatDueDate(dueDate)
+  const dateText = formatDueDate(dueDate, completed)
   const badgeClassName = getDueDateClassName(dueDate)
 
   // 如果任务已完成，使用灰色样式
