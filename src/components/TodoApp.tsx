@@ -211,7 +211,8 @@ export default function TodoApp(): React.ReactElement {
     if (!user) return
     
     try {
-      const { error } = await supabase
+      console.log('Saving content:', contentText)
+      const { data, error } = await supabase
         .from('todos')
         .update({ 
           content: contentText,
@@ -219,13 +220,21 @@ export default function TodoApp(): React.ReactElement {
         })
         .eq('id', id)
         .eq('user_id', user.id)
+        .select()
       
-      if (error) throw error
+      if (error) {
+        console.error('Supabase error:', error)
+        alert(`保存失败: ${error.message}\n\n请确保已执行数据库迁移，添加 content 字段。`)
+        throw error
+      }
+      
+      console.log('Content saved successfully:', data)
       setTodos(todos.map(todo => 
         todo.id === id ? { ...todo, content: contentText } : todo
       ))
       setEditingContent(null)
       setContentText('')
+      alert('内容保存成功！')
     } catch (error) {
       console.error('Error updating todo content:', error)
     }

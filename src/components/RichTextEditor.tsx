@@ -1,4 +1,4 @@
-import React from 'react'
+import React, { useEffect } from 'react'
 import { useEditor, EditorContent } from '@tiptap/react'
 import StarterKit from '@tiptap/starter-kit'
 import Placeholder from '@tiptap/extension-placeholder'
@@ -53,6 +53,13 @@ export default function RichTextEditor({
       },
     },
   })
+
+  // 同步外部 content 变化
+  useEffect(() => {
+    if (editor && content !== editor.getHTML()) {
+      editor.commands.setContent(content)
+    }
+  }, [content, editor])
 
   if (!editor) {
     return <div>加载编辑器...</div>
