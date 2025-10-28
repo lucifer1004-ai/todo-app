@@ -111,8 +111,15 @@ export default function TodoApp(): React.ReactElement {
   }
 
   // 删除待办事项
-  const deleteTodo = async (id: number): Promise<void> => {
+  const deleteTodo = async (id: number, title: string): Promise<void> => {
     if (!user) return
+    
+    // 显示确认对话框
+    const confirmed = window.confirm(
+      `确定要删除任务"${title}"吗？\n\n此操作无法撤销。`
+    )
+    
+    if (!confirmed) return
     
     try {
       const { error } = await supabase
@@ -125,6 +132,7 @@ export default function TodoApp(): React.ReactElement {
       setTodos(todos.filter(todo => todo.id !== id))
     } catch (error) {
       console.error('Error deleting todo:', error)
+      alert('删除失败,请重试')
     }
   }
 
@@ -480,7 +488,7 @@ export default function TodoApp(): React.ReactElement {
                             <Button
                               variant="ghost"
                               size="sm"
-                              onClick={() => deleteTodo(todo.id)}
+                              onClick={() => deleteTodo(todo.id, todo.title)}
                               className="text-red-500 hover:text-red-700 hover:bg-red-50 transition-colors duration-200 p-1 h-auto"
                               type="button"
                               title="删除"
