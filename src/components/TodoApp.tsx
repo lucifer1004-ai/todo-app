@@ -4,7 +4,7 @@ import { useAuth } from '@/contexts/AuthContext'
 import { Button } from '@/components/ui/button'
 import { Input } from '@/components/ui/input'
 import { Card, CardContent, CardHeader, CardTitle } from '@/components/ui/card'
-import { Trash2, Plus, CheckCircle2, Circle, Edit3, Download, Package } from 'lucide-react'
+import { Trash2, Plus, CheckCircle2, Circle, Edit3, Download, Package, Check, X, ChevronDown, ChevronUp } from 'lucide-react'
 import { motion, AnimatePresence } from 'framer-motion'
 import UserMenu from './auth/UserMenu'
 import DatePicker from './DatePicker'
@@ -14,7 +14,7 @@ import BatchExport from './BatchExport'
 import RichTextEditor from './RichTextEditor'
 import MarkdownContent from './MarkdownContent'
 import { isOverdue, isDueToday } from '@/utils/dateUtils'
-import { ChevronDown, ChevronUp } from 'lucide-react'
+
 
 // 定义 Todo 类型
 interface Todo {
@@ -32,12 +32,14 @@ export default function TodoApp(): React.ReactElement {
   const [todos, setTodos] = useState<Todo[]>([])
   const [newTodo, setNewTodo] = useState<string>('')
   const [newTodoDueDate, setNewTodoDueDate] = useState<string | null>(null)
-  const [editingDueDate, setEditingDueDate] = useState<number | null>(null)
-  const [editingTodo, setEditingTodo] = useState<number | null>(null)
-  const [editingText, setEditingText] = useState<string>('')
   const [expandedTodo, setExpandedTodo] = useState<number | null>(null)
-  const [editingContent, setEditingContent] = useState<number | null>(null)
-  const [contentText, setContentText] = useState<string>('')
+  
+  // 统一的编辑状态
+  const [editingTodo, setEditingTodo] = useState<number | null>(null)
+  const [editingTitle, setEditingTitle] = useState<string>('')
+  const [editingContent, setEditingContent] = useState<string>('')
+  const [editingDueDate, setEditingDueDate] = useState<string | null>(null)
+  
   const [loading, setLoading] = useState<boolean>(true)
   const [showBatchExport, setShowBatchExport] = useState<boolean>(false)
   const { user } = useAuth()
@@ -126,96 +128,39 @@ export default function TodoApp(): React.ReactElement {
     }
   }
 
-  // 更新待办事项截止日期
-  const updateTodoDueDate = async (id: number, dueDate: string | null): Promise<void> => {
-    if (!user) return
-    
-    try {
-      const { error } = await supabase
-        .from('todos')
-        .update({ 
-          due_date: dueDate,
-          updated_at: new Date().toISOString() 
-        })
-        .eq('id', id)
-        .eq('user_id', user.id)
-      
-      if (error) throw error
-      setTodos(todos.map(todo => 
-        todo.id === id ? { ...todo, due_date: dueDate } : todo
-      ))
-      setEditingDueDate(null)
-    } catch (error) {
-      console.error('Error updating todo due date:', error)
-    }
-  }
-
-  // 开始编辑待办事项标题
-  const startEditingTodo = (id: number, currentTitle: string): void => {
-    setEditingTodo(id)
-    setEditingText(currentTitle)
-  }
-
-  // 更新待办事项标题
-  const updateTodoTitle = async (id: number): Promise<void> => {
-    if (!user || !editingText.trim()) {
-      setEditingTodo(null)
-      return
-    }
-    
-    try {
-      const { error } = await supabase
-        .from('todos')
-        .update({ 
-          title: editingText.trim(),
-          updated_at: new Date().toISOString() 
-        })
-        .eq('id', id)
-        .eq('user_id', user.id)
-      
-      if (error) throw error
-      setTodos(todos.map(todo => 
-        todo.id === id ? { ...todo, title: editingText.trim() } : todo
-      ))
-      setEditingTodo(null)
-      setEditingText('')
-    } catch (error) {
-      console.error('Error updating todo title:', error)
-    }
-  }
-
-  // 取消编辑
-  const cancelEditing = (): void => {
-    setEditingTodo(null)
-    setEditingText('')
-  }
-
   // 切换任务展开/折叠状态
   const toggleExpand = (id: number): void => {
     if (expandedTodo === id) {
       setExpandedTodo(null)
-      setEditingContent(null)
     } else {
       setExpandedTodo(id)
     }
   }
 
-  // 开始编辑内容
-  const startEditingContent = (id: number, currentContent: string): void => {
-    setEditingContent(id)
-    setContentText(currentContent || '')
+  // 进入编辑模式
+  const startEditing = (todo: Todo): void => {
+    setEditingTodo(todo.id)
+    setEditingTitle(todo.title)
+    setEditingContent(todo.content || '')
+    setEditingDueDate(todo.due_date || null)
+    // 自动展开任务以显示内容编辑器
+    setExpandedTodo(todo.id)
   }
 
-  // 更新任务内容
-  const updateTodoContent = async (id: number): Promise<void> => {
-    if (!user) return
+  // 保存编辑
+  const saveEditing = async (id: number): Promise<void> => {
+    if (!user || !editingTitle.trim()) {
+      alert('任务标题不能为空')
+      return
+    }
     
     try {
-      console.log('Saving content:', contentText)
       const { data, error } = await supabase
         .from('todos')
         .update({ 
-          content: contentText,
+          title: editingTitle.trim(),
+          content: editingContent,
+          due_date: editingDueDate,
           updated_at: new Date().toISOString() 
         })
         .eq('id', id)
@@ -224,26 +169,38 @@ export default function TodoApp(): React.ReactElement {
       
       if (error) {
         console.error('Supabase error:', error)
-        alert(`保存失败: ${error.message}\n\n请确保已执行数据库迁移，添加 content 字段。`)
+        alert(`保存失败: ${error.message}`)
         throw error
       }
       
-      console.log('Content saved successfully:', data)
+      console.log('Todo saved successfully:', data)
       setTodos(todos.map(todo => 
-        todo.id === id ? { ...todo, content: contentText } : todo
+        todo.id === id ? { 
+          ...todo, 
+          title: editingTitle.trim(),
+          content: editingContent,
+          due_date: editingDueDate
+        } : todo
       ))
-      setEditingContent(null)
-      setContentText('')
-      alert('内容保存成功！')
+      
+      // 清空编辑状态
+      setEditingTodo(null)
+      setEditingTitle('')
+      setEditingContent('')
+      setEditingDueDate(null)
+      
+      alert('保存成功！')
     } catch (error) {
-      console.error('Error updating todo content:', error)
+      console.error('Error saving todo:', error)
     }
   }
 
-  // 取消内容编辑
-  const cancelContentEditing = (): void => {
-    setEditingContent(null)
-    setContentText('')
+  // 取消编辑
+  const cancelEditing = (): void => {
+    setEditingTodo(null)
+    setEditingTitle('')
+    setEditingContent('')
+    setEditingDueDate(null)
   }
 
   useEffect(() => {
@@ -430,41 +387,16 @@ export default function TodoApp(): React.ReactElement {
                       </button>
                       
                       <div className="flex-1 space-y-2">
+                        {/* 标题显示/编辑 */}
                         {editingTodo === todo.id ? (
-                          <div className="flex items-center gap-2">
-                            <Input
-                              type="text"
-                              value={editingText}
-                              onChange={(e: ChangeEvent<HTMLInputElement>) => setEditingText(e.target.value)}
-                              onKeyDown={(e: React.KeyboardEvent<HTMLInputElement>) => {
-                                if (e.key === 'Enter') {
-                                  updateTodoTitle(todo.id)
-                                } else if (e.key === 'Escape') {
-                                  cancelEditing()
-                                }
-                              }}
-                              className="flex-1 border-2 border-indigo-500 focus:border-indigo-600"
-                              autoFocus
-                            />
-                            <Button
-                              variant="ghost"
-                              size="sm"
-                              onClick={() => updateTodoTitle(todo.id)}
-                              className="text-green-600 hover:text-green-700 hover:bg-green-50"
-                              type="button"
-                            >
-                              保存
-                            </Button>
-                            <Button
-                              variant="ghost"
-                              size="sm"
-                              onClick={cancelEditing}
-                              className="text-gray-600 hover:text-gray-700 hover:bg-gray-50"
-                              type="button"
-                            >
-                              取消
-                            </Button>
-                          </div>
+                          <Input
+                            type="text"
+                            value={editingTitle}
+                            onChange={(e: ChangeEvent<HTMLInputElement>) => setEditingTitle(e.target.value)}
+                            className="flex-1 border-2 border-indigo-500 focus:border-indigo-600"
+                            placeholder="任务标题"
+                            autoFocus
+                          />
                         ) : (
                           <div className="flex items-center gap-2 group">
                             <span 
@@ -476,116 +408,109 @@ export default function TodoApp(): React.ReactElement {
                             >
                               {todo.title}
                             </span>
-                            <Button
-                              variant="ghost"
-                              size="sm"
-                              onClick={() => startEditingTodo(todo.id, todo.title)}
-                              className="text-gray-400 hover:text-indigo-500 p-1 h-auto opacity-0 group-hover:opacity-100 transition-opacity"
-                              type="button"
-                            >
-                              <Edit3 className="w-4 h-4" />
-                            </Button>
                           </div>
                         )}
                         
-                        {/* 截止日期显示 */}
-                        <div className="flex items-center gap-2">
+                        {/* 截止日期显示/编辑 */}
+                        {editingTodo === todo.id ? (
+                          <DatePicker
+                            value={editingDueDate}
+                            onChange={setEditingDueDate}
+                            placeholder="设置截止日期（可选）"
+                            className="w-full"
+                          />
+                        ) : (
                           <DueDateBadge 
                             dueDate={todo.due_date} 
                             completed={todo.completed}
                           />
-                          
-                          {/* 编辑截止日期按钮 */}
-                          {editingDueDate === todo.id ? (
-                            <DatePicker
-                              value={todo.due_date}
-                              onChange={(date) => updateTodoDueDate(todo.id, date)}
-                              placeholder="设置截止日期"
-                              className="w-48"
-                            />
-                          ) : (
-                            <Button
-                              variant="ghost"
-                              size="sm"
-                              onClick={() => setEditingDueDate(todo.id)}
-                              className="text-gray-400 hover:text-indigo-500 p-1 h-auto"
-                              type="button"
-                            >
-                              <Edit3 className="w-3 h-3" />
-                            </Button>
-                          )}
-                        </div>
+                        )}
                       </div>
                       
                       <div className="flex flex-col gap-2">
-                        <Button
-                          variant="ghost"
-                          size="sm"
-                          onClick={() => toggleExpand(todo.id)}
-                          className="text-gray-400 hover:text-indigo-500 p-1 h-auto"
-                          type="button"
-                          title="展开/折叠详细内容"
-                        >
-                          {expandedTodo === todo.id ? (
-                            <ChevronUp className="w-4 h-4" />
-                          ) : (
-                            <ChevronDown className="w-4 h-4" />
-                          )}
-                        </Button>
-                        <Button
-                          variant="ghost"
-                          size="sm"
-                          onClick={() => deleteTodo(todo.id)}
-                          className="text-red-500 hover:text-red-700 hover:bg-red-50 transition-colors duration-200 p-1 h-auto"
-                          type="button"
-                        >
-                          <Trash2 className="w-4 h-4" />
-                        </Button>
+                        {editingTodo === todo.id ? (
+                          <>
+                            <Button
+                              variant="ghost"
+                              size="sm"
+                              onClick={() => saveEditing(todo.id)}
+                              className="text-green-600 hover:text-green-700 hover:bg-green-50 p-1 h-auto"
+                              type="button"
+                              title="保存"
+                            >
+                              <Check className="w-4 h-4" />
+                            </Button>
+                            <Button
+                              variant="ghost"
+                              size="sm"
+                              onClick={cancelEditing}
+                              className="text-gray-600 hover:text-gray-700 hover:bg-gray-50 p-1 h-auto"
+                              type="button"
+                              title="取消"
+                            >
+                              <X className="w-4 h-4" />
+                            </Button>
+                          </>
+                        ) : (
+                          <>
+                            <Button
+                              variant="ghost"
+                              size="sm"
+                              onClick={() => startEditing(todo)}
+                              className="text-gray-400 hover:text-indigo-500 p-1 h-auto"
+                              type="button"
+                              title="编辑"
+                            >
+                              <Edit3 className="w-4 h-4" />
+                            </Button>
+                            <Button
+                              variant="ghost"
+                              size="sm"
+                              onClick={() => toggleExpand(todo.id)}
+                              className="text-gray-400 hover:text-indigo-500 p-1 h-auto"
+                              type="button"
+                              title="展开/折叠详细内容"
+                            >
+                              {expandedTodo === todo.id ? (
+                                <ChevronUp className="w-4 h-4" />
+                              ) : (
+                                <ChevronDown className="w-4 h-4" />
+                              )}
+                            </Button>
+                            <Button
+                              variant="ghost"
+                              size="sm"
+                              onClick={() => deleteTodo(todo.id)}
+                              className="text-red-500 hover:text-red-700 hover:bg-red-50 transition-colors duration-200 p-1 h-auto"
+                              type="button"
+                              title="删除"
+                            >
+                              <Trash2 className="w-4 h-4" />
+                            </Button>
+                          </>
+                        )}
                       </div>
                     </div>
 
                     {/* 展开的详细内容 */}
                     {expandedTodo === todo.id && (
                       <div className="px-4 pb-4 border-t border-gray-200 mt-2 pt-4">
-                        {editingContent === todo.id ? (
+                        {editingTodo === todo.id ? (
                           <div className="space-y-3">
+                            <div className="text-sm font-medium text-gray-700 mb-2">详细内容</div>
                             <RichTextEditor
-                              content={contentText}
-                              onChange={setContentText}
+                              content={editingContent}
+                              onChange={setEditingContent}
                               placeholder="添加详细内容..."
                             />
-                            <div className="flex justify-end gap-2">
-                              <Button
-                                variant="outline"
-                                size="sm"
-                                onClick={cancelContentEditing}
-                                type="button"
-                              >
-                                取消
-                              </Button>
-                              <Button
-                                size="sm"
-                                onClick={() => updateTodoContent(todo.id)}
-                                className="bg-gradient-to-r from-indigo-500 to-purple-500 hover:from-indigo-600 hover:to-purple-600"
-                                type="button"
-                              >
-                                保存内容
-                              </Button>
-                            </div>
                           </div>
                         ) : (
                           <div className="space-y-3">
-                            <MarkdownContent content={todo.content || ''} />
-                            <Button
-                              variant="outline"
-                              size="sm"
-                              onClick={() => startEditingContent(todo.id, todo.content || '')}
-                              className="flex items-center gap-2"
-                              type="button"
-                            >
-                              <Edit3 className="w-3 h-3" />
-                              {todo.content ? '编辑内容' : '添加内容'}
-                            </Button>
+                            {todo.content ? (
+                              <MarkdownContent content={todo.content} />
+                            ) : (
+                              <p className="text-gray-400 text-sm italic">暂无详细内容</p>
+                            )}
                           </div>
                         )}
                       </div>
