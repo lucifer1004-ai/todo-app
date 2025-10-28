@@ -4,8 +4,19 @@ import { useAuth } from '@/contexts/AuthContext'
 import { Button } from '@/components/ui/button'
 import { Input } from '@/components/ui/input'
 import { Card, CardContent, CardHeader, CardTitle } from '@/components/ui/card'
-import { Trash2, Plus, CheckCircle2, Circle, Edit3, Download, Package, Check, X, ChevronDown, ChevronUp } from 'lucide-react'
+import { Trash2, Plus, CheckCircle2, Circle, Edit3, Download, Package, Check, X, ChevronDown, ChevronUp, AlertTriangle } from 'lucide-react'
 import { motion, AnimatePresence } from 'framer-motion'
+import { toast } from 'sonner'
+import {
+  AlertDialog,
+  AlertDialogAction,
+  AlertDialogCancel,
+  AlertDialogContent,
+  AlertDialogDescription,
+  AlertDialogFooter,
+  AlertDialogHeader,
+  AlertDialogTitle,
+} from '@/components/ui/alert-dialog'
 import UserMenu from './auth/UserMenu'
 import DatePicker from './DatePicker'
 import DueDateBadge from './DueDateBadge'
@@ -42,6 +53,11 @@ export default function TodoApp(): React.ReactElement {
   
   const [loading, setLoading] = useState<boolean>(true)
   const [showBatchExport, setShowBatchExport] = useState<boolean>(false)
+  
+  // 删除确认对话框状态
+  const [deleteDialogOpen, setDeleteDialogOpen] = useState<boolean>(false)
+  const [todoToDelete, setTodoToDelete] = useState<{ id: number; title: string } | null>(null)
+  
   const { user } = useAuth()
 
   // 获取当前用户的待办事项
@@ -110,29 +126,36 @@ export default function TodoApp(): React.ReactElement {
     }
   }
 
-  // 删除待办事项
-  const deleteTodo = async (id: number, title: string): Promise<void> => {
-    if (!user) return
-    
-    // 显示确认对话框
-    const confirmed = window.confirm(
-      `确定要删除任务"${title}"吗？\n\n此操作无法撤销。`
-    )
-    
-    if (!confirmed) return
+  // 打开删除确认对话框
+  const openDeleteDialog = (id: number, title: string): void => {
+    setTodoToDelete({ id, title })
+    setDeleteDialogOpen(true)
+  }
+
+  // 执行删除
+  const confirmDelete = async (): Promise<void> => {
+    if (!user || !todoToDelete) return
     
     try {
       const { error } = await supabase
         .from('todos')
         .delete()
-        .eq('id', id)
+        .eq('id', todoToDelete.id)
         .eq('user_id', user.id)
       
       if (error) throw error
-      setTodos(todos.filter(todo => todo.id !== id))
+      
+      setTodos(todos.filter(todo => todo.id !== todoToDelete.id))
+      toast.success('任务已删除', {
+        description: `"${todoToDelete.title}" 已成功删除`
+      })
+      setDeleteDialogOpen(false)
+      setTodoToDelete(null)
     } catch (error) {
       console.error('Error deleting todo:', error)
-      alert('删除失败,请重试')
+      toast.error('删除失败', {
+        description: '请检查网络连接后重试'
+      })
     }
   }
 
@@ -158,7 +181,9 @@ export default function TodoApp(): React.ReactElement {
   // 保存编辑
   const saveEditing = async (id: number): Promise<void> => {
     if (!user || !editingTitle.trim()) {
-      alert('任务标题不能为空')
+      toast.error('验证失败', {
+        description: '任务标题不能为空'
+      })
       return
     }
     
@@ -177,7 +202,9 @@ export default function TodoApp(): React.ReactElement {
       
       if (error) {
         console.error('Supabase error:', error)
-        alert(`保存失败: ${error.message}`)
+        toast.error('保存失败', {
+          description: error.message
+        })
         throw error
       }
       
@@ -197,7 +224,9 @@ export default function TodoApp(): React.ReactElement {
       setEditingContent('')
       setEditingDueDate(null)
       
-      alert('保存成功！')
+      toast.success('保存成功', {
+        description: '任务已更新'
+      })
     } catch (error) {
       console.error('Error saving todo:', error)
     }
@@ -488,7 +517,7 @@ export default function TodoApp(): React.ReactElement {
                             <Button
                               variant="ghost"
                               size="sm"
-                              onClick={() => deleteTodo(todo.id, todo.title)}
+                              onClick={() => openDeleteDialog(todo.id, todo.title)}
                               className="text-red-500 hover:text-red-700 hover:bg-red-50 transition-colors duration-200 p-1 h-auto"
                               type="button"
                               title="删除"
@@ -549,6 +578,32 @@ export default function TodoApp(): React.ReactElement {
           isOpen={showBatchExport}
           onClose={() => setShowBatchExport(false)}
         />
+        
+        {/* 删除确认对话框 */}
+        <AlertDialog open={deleteDialogOpen} onOpenChange={setDeleteDialogOpen}>
+          <AlertDialogContent>
+            <AlertDialogHeader>
+              <AlertDialogTitle className="flex items-center gap-2">
+                <AlertTriangle className="w-5 h-5 text-red-500" />
+                确认删除
+              </AlertDialogTitle>
+              <AlertDialogDescription>
+                确定要删除任务 <span className="font-semibold text-foreground">"{todoToDelete?.title}"</span> 吗？
+                <br />
+                <span className="text-red-500">此操作无法撤销。</span>
+              </AlertDialogDescription>
+            </AlertDialogHeader>
+            <AlertDialogFooter>
+              <AlertDialogCancel>取消</AlertDialogCancel>
+              <AlertDialogAction
+                onClick={confirmDelete}
+                className="bg-red-500 hover:bg-red-600 focus:ring-red-500"
+              >
+                确认删除
+              </AlertDialogAction>
+            </AlertDialogFooter>
+          </AlertDialogContent>
+        </AlertDialog>
       </div>
     </div>
   )

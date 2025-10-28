@@ -2,6 +2,7 @@ import React from 'react'
 import { AuthProvider, useAuth } from '@/contexts/AuthContext'
 import TodoApp from '@/components/TodoApp'
 import AuthPage from '@/components/auth/AuthPage'
+import { Toaster } from '@/components/ui/sonner'
 import './App.css'
 
 // 主应用组件，处理认证状态
@@ -29,6 +30,7 @@ function App(): React.ReactElement {
   return (
     <AuthProvider>
       <AppContent />
+      <Toaster position="top-center" richColors />
     </AuthProvider>
   )
 }
